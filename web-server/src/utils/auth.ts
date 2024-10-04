@@ -61,7 +61,7 @@ export const getMissingPATScopes = async (pat: string) => {
   }
 };
 
-// Gitlab functions
+// GitLab functions
 
 export const checkGitLabValidity = async (accessToken: string) => {
   const url = 'https://gitlab.com/api/v4/personal_access_tokens/self';
@@ -84,4 +84,40 @@ export const getMissingGitLabScopes = (scopes: string[]): string[] => {
     (scope) => !scopes.includes(scope)
   );
   return missingScopes;
+};
+
+// Bitbucket functions
+
+export const checkBitbucketValidity = async (accessToken: string) => {
+  const url = 'https://api.bitbucket.org/2.0/user';
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error('Invalid Bitbucket access token', error);
+  }
+};
+
+const BITBUCKET_SCOPES = ['account', 'repository', 'team', 'pullrequest'];
+
+export const getMissingBitbucketScopes = async (accessToken: string) => {
+  try {
+    const response = await axios.get('https://api.bitbucket.org/2.0/user/permissions', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+
+    const scopesString = response.headers['x-oauth-scopes'];
+    if (!scopesString) return BITBUCKET_SCOPES;
+
+    const userScopes = scopesString.split(',').map((scope: any) => scope.trim()); // update any to the correct type
+    return BITBUCKET_SCOPES.filter((scope) => !userScopes.includes(scope));
+  } catch (error) {
+    throw new Error('Failed to get missing Bitbucket scopes', error);
+  }
 };
