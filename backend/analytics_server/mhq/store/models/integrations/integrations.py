@@ -47,3 +47,5 @@ class UserIdentity(db.Model):
     def avatar_url(self):
         if self.provider == UserIdentityProvider.GITHUB.value:
             return f"https://github.com/{self.username}.png"
+        elif self.provider == UserIdentityProvider.GITLAB.value:
+            return f"https://gitlab.com/uploads/-/system/user/avatar/{self.user_id}/avatar.png"
