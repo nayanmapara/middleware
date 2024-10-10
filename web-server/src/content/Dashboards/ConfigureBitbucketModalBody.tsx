@@ -14,28 +14,29 @@ import { fetchTeams } from '@/slices/team';
 import { useDispatch } from '@/store';
 import { 
     linkProvider, 
-    checkBitbucketValidity, getMissingBitbucketScopes 
+    checkBitbucketValidity, getMissingBitbucketPermissions
 } from '@/utils/auth';
 import { depFn } from '@/utils/fn';
 
 export const ConfigureBitbucketModalBody: FC<{
   onClose: () => void;
 }> = ({ onClose }) => {
-  const token = useEasyState('');
+  const username = useEasyState('');
+  const password = useEasyState('');
   const customDomain = useEasyState('');
   const { orgId } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
   const dispatch = useDispatch();
   const isLoading = useBoolState();
 
-  const showScopeError = useEasyState<string>('');
+  const showCredentialsError = useEasyState<string>('');
   const showDomainError = useEasyState<string>('');
 
-  const setScopeError = useCallback(
+  const setCredentialsError = useCallback(
     (error: string) => {
-      depFn(showScopeError.set, error);
+      depFn(showCredentialsError.set, error);
     },
-    [showScopeError.set]
+    [showCredentialsError.set]
   );
 
   const setDomainError = useCallback(
@@ -51,9 +52,14 @@ export const ConfigureBitbucketModalBody: FC<{
     return regex.test(domain);
   };
 
-  const handleTokenChange = (e: string) => {
-    token.set(e);
-    showScopeError.set('');
+  const handleUsernameChange = (e: string) => {
+    username.set(e);
+    showCredentialsError.set('');
+  };
+
+  const handlePasswordChange = (e: string) => {
+    password.set(e);
+    showCredentialsError.set('');
   };
 
   const handleDomainChange = (e: string) => {
@@ -63,9 +69,9 @@ export const ConfigureBitbucketModalBody: FC<{
 
   const handleSubmission = useCallback(async () => {
     try {
-      if (!token.value) {
-        setScopeError('Please enter a valid token');
-        throw Error('Empty token');
+      if (!username.value || !password.value) {
+        setCredentialsError('Please enter a valid username and password');
+        throw Error('Empty username or password');
       }
 
       if (customDomain.value && !checkDomainWithRegex(customDomain.value)) {
@@ -78,28 +84,28 @@ export const ConfigureBitbucketModalBody: FC<{
     }
 
     depFn(isLoading.true);
-    await checkBitbucketValidity(token.value)
+    await checkBitbucketValidity(username.value, password.value)
       .then(async (res) => {
         return res;
       })
-      .then(async (response) => {
-        const res = getMissingBitbucketScopes(response.scopes);
-        if ((await res).length) {
-          throw new Error(`Token is missing scopes: ${(await res).join(', ')}`);
-        }
-      })
       .then(async () => {
-        try {
-          return await linkProvider(token.value, orgId, Integration.BITBUCKET, {
-            custom_domain: customDomain.value
-          });
-        } catch (e: any) {
-          throw new Error(
-            `Failed to link Bitbucket${e?.message ? `: ${e?.message}` : ''}`,
-            e
-          );
-        }
+          const res = getMissingBitbucketPermissions(username.value, password.value);
+          if ((await res).length) {
+            throw new Error(`Token is missing scopes: ${(await res).join(', ')}`);
+          }
       })
+      // .then(async () => {
+      //   try {
+      //     return await linkProvider(username.value, orgId, password.value, Integration.BITBUCKET, {
+      //       custom_domain: customDomain.value
+      //     });
+      //   } catch (e: any) {
+      //     throw new Error(
+      //       `Failed to link Bitbucket${e?.message ? `: ${e?.message}` : ''}`,
+      //       e
+      //     );
+      //   }
+      // })
       .then(() => {
         dispatch(fetchCurrentOrg());
         dispatch(
@@ -114,12 +120,12 @@ export const ConfigureBitbucketModalBody: FC<{
         onClose();
       })
       .catch((e) => {
-        setScopeError(e.message);
-        console.error(`Error while linking token: ${e.message}`, e);
+        setCredentialsError(e.message);
+        console.error(`Error while linking credentials: ${e.message}`, e);
       })
       .finally(isLoading.false);
   }, [
-    customDomain.value,
+    // customDomain.value,
     dispatch,
     enqueueSnackbar,
     isLoading.false,
@@ -127,58 +133,84 @@ export const ConfigureBitbucketModalBody: FC<{
     onClose,
     orgId,
     setDomainError,
-    setScopeError,
-    token.value
+    setCredentialsError,
+    username.value,
+    password.value
   ]);
 
-  const isDomainInputFocus = useBoolState(false);
+  // const isDomainInputFocus = useBoolState(false);
 
-  const focusDomainInput = useCallback(() => {
-    if (!customDomain.value)
-      document.getElementById('bitbucket-custom-domain')?.focus();
-    else handleSubmission();
-  }, [customDomain.value, handleSubmission]);
+  // const focusDomainInput = useCallback(() => {
+  //   if (!customDomain.value)
+  //     document.getElementById('bitbucket-custom-domain')?.focus();
+  //   else handleSubmission();
+  // }, [customDomain.value, handleSubmission]);
 
   return (
     <FlexBox gap2>
       <FlexBox gap={2} minWidth={'400px'} col>
         <FlexBox>
-          Enter your Bitbucket token below{' '}
+          Enter your Bitbucket username and password below{' '}
           <Line bigish ml={1 / 2} error>
             *
           </Line>
         </FlexBox>
-        <FlexBox fullWidth minHeight={'80px'} col>
+        <FlexBox fullWidth col>
           <TextField
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
                 e.stopPropagation();
                 e.nativeEvent.stopImmediatePropagation();
-                focusDomainInput();
+                // focusDomainInput();
                 return;
               }
             }}
-            error={!!showScopeError.value}
+            error={!!showCredentialsError.value}
             sx={{ width: '100%' }}
-            value={token.value}
+            value={username.value}
             onChange={(e) => {
-              handleTokenChange(e.currentTarget.value);
+              handleUsernameChange(e.currentTarget.value);
             }}
-            label="Bitbucket Personal Access Token"
-            type="password"
+            label="Bitbucket Username"
+            type="text"
           />
           <Line error tiny mt={1}>
-            {showScopeError.value}
+            {showCredentialsError.value}
           </Line>
         </FlexBox>
 
-        <FlexBox fullWidth minHeight={'80px'} col>
-          <FlexBox gap2 col>
-            <FlexBox alignBase gap1>
+        <FlexBox fullWidth col>
+          <TextField
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                e.nativeEvent.stopImmediatePropagation();
+                // focusDomainInput();
+                return;
+              }
+            }}
+            error={!!showCredentialsError.value}
+            sx={{ width: '100%' }}
+            value={password.value}
+            onChange={(e) => {
+              handlePasswordChange(e.currentTarget.value);
+            }}
+            label="Bitbucket Password"
+            type="password"
+          />
+          <Line error tiny mt={1}>
+            {showCredentialsError.value}
+          </Line>
+        </FlexBox>
+
+        <FlexBox fullWidth minHeight={'50px'} col>
+          {/* <FlexBox gap2 col> */}
+            {/* <FlexBox alignBase gap1>
               Custom domain
-            </FlexBox>
-            <TextField
+            </FlexBox> */}
+            {/* <TextField
               id="bitbucket-custom-domain"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -200,12 +232,13 @@ export const ConfigureBitbucketModalBody: FC<{
               }
               onFocus={isDomainInputFocus.true}
               onBlur={isDomainInputFocus.false}
-            />
-          </FlexBox>
-          <Line error tiny mt={1} minHeight={'18px'}>
+            /> */}
+          {/* </FlexBox> */}
+          {/* <Line error tiny mt={1} minHeight={'18px'}>
             {showDomainError.value}
-          </Line>
+          </Line> */}
           <FlexBox>
+
             <Line tiny mt={1} primary sx={{ cursor: 'pointer' }}>
               <Link
                 href="https://bitbucket.org/account/settings/app-passwords/"
@@ -218,7 +251,7 @@ export const ConfigureBitbucketModalBody: FC<{
                     textUnderlineOffset: '2px'
                   }}
                 >
-                  Generate new token
+                  Generate new password
                 </Line>
               </Link>
               <Line ml={'5px'}>{' ->'}</Line>
@@ -270,7 +303,6 @@ const TokenPermissions = () => {
       position: 'absolute',
       maxWidth: 'calc(100% - 48px)',
     };
-
     return [
       {
         width: '175px',
@@ -298,6 +330,7 @@ const TokenPermissions = () => {
       },
     ].map((item) => ({ ...item, ...baseStyles }));
   }, []);
+
 
   return (
     <FlexBox col gap1 maxWidth={'100%'} overflow={'auto'}>
